@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`check_component()` mutated `self` on every call**: The method resolved `None` fields (`include_completed`, `todo`, `event`, `journal`) and normalised `start`/`end`/`alarm_start`/`alarm_end` date objects to datetimes by writing back to `self`.  This made a `Searcher` instance stateful: calling `check_component()` twice could produce different results, and reusing a `Searcher` across multiple search operations (e.g. in the python-caldav library) could silently change behaviour after the first call.  All these values are now computed as local variables inside `check_component()` and threaded to the internal filter methods via new keyword parameters (`_start`, `_end`, `_alarm_start`, `_alarm_end`, `_include_completed`), keeping `self` immutable throughout.  (Triggered by https://github.com/python-caldav/caldav/issues/650)
+
 ## [1.0.5] - 2026-02-19
 
 ### Changes

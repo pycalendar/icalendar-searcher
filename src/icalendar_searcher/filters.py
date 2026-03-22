@@ -25,14 +25,26 @@ class FilterMixin:
     - _property_locale: dict of property locales
     """
 
-    def _check_range(self, component: Component) -> bool:
+    def _check_range(
+        self,
+        component: Component,
+        _start: datetime | None = None,
+        _end: datetime | None = None,
+    ) -> bool:
         """Check if a component falls within the time range specified by self.start and self.end.
 
         Implements RFC4791 section 9.9 time-range filtering logic for VEVENT, VTODO, and VJOURNAL.
 
         :param component: A single calendar component (VEVENT, VTODO, or VJOURNAL)
+        :param _start: Effective start datetime (defaults to self.start).  Pass a pre-normalised
+            value from check_component() to avoid mutating self.
+        :param _end: Effective end datetime (defaults to self.end).  See _start.
         :return: True if the component matches the time range, False otherwise
         """
+        ## Resolve effective values — callers may pass pre-computed normalised datetimes
+        ## so that self is not mutated during filtering.
+        start = _start if _start is not None else self.start
+        end = _end if _end is not None else self.end
         comp_name = component.name
 
         ## The logic below should correspond neatly with RFC4791 section 9.9
@@ -126,22 +138,29 @@ class FilterMixin:
 
         ## After the logic above, all rows in the matrix boils down to
         ## this: (we could reduce it even more by defaulting
-        ## self.start and self.end to DATE_MIN_DT etc)
-        if self.start and self.end and comp_end:
-            return self.start < comp_end and self.end > comp_start
-        elif self.end:
-            return self.end > comp_start
-        elif self.start and comp_end:
-            return self.start < comp_end
+        ## start and end to DATE_MIN_DT etc)
+        if start and end and comp_end:
+            return start < comp_end and end > comp_start
+        elif end:
+            return end > comp_start
+        elif start and comp_end:
+            return start < comp_end
         return True
 
-    def _check_completed_filter(self, component: Component) -> bool:
+    def _check_completed_filter(
+        self,
+        component: Component,
+        _include_completed: bool | None = None,
+    ) -> bool:
         """Check if a component should be included based on the include_completed filter.
 
         :param component: A single calendar component
+        :param _include_completed: Effective value (defaults to self.include_completed).  Pass a
+            pre-resolved value from check_component() to avoid mutating self.
         :return: True if the component should be included, False if it should be filtered out
         """
-        if self.include_completed:
+        include_completed = _include_completed if _include_completed is not None else self.include_completed
+        if include_completed:
             return True
 
         ## If include_completed is False, exclude completed/cancelled VTODOs
@@ -372,15 +391,27 @@ class FilterMixin:
 
     ## DISCLAIMER: Mostly AI-generated code, with a touch of human polishing
     ## and bugfixing. Alarms are a bit complex.
-    def _check_alarm_range(self, component: Component) -> bool:
+    def _check_alarm_range(
+        self,
+        component: Component,
+        _alarm_start: datetime | None = None,
+        _alarm_end: datetime | None = None,
+    ) -> bool:
         """Check if a component has alarms that fire within the alarm time range.
 
         Implements RFC 4791 section 9.9 alarm time-range filtering.
 
         :param component: A single calendar component (VEVENT, VTODO, or VJOURNAL)
+        :param _alarm_start: Effective alarm start (defaults to self.alarm_start).  Pass a
+            pre-normalised value from check_component() to avoid mutating self.
+        :param _alarm_end: Effective alarm end (defaults to self.alarm_end).  See _alarm_start.
         :return: True if any alarm fires within the alarm range, False otherwise
         """
         from datetime import timedelta
+
+        ## Resolve effective values — callers may pass pre-computed normalised datetimes
+        alarm_start = _alarm_start if _alarm_start is not None else self.alarm_start
+        alarm_end = _alarm_end if _alarm_end is not None else self.alarm_end
 
         ## Get all VALARM subcomponents
         alarms = [x for x in component.subcomponents if x.name == "VALARM"]
@@ -451,27 +482,27 @@ class FilterMixin:
                     for i in range(int(repeat_count) + 1):
                         repeat_time = alarm_time + (duration * i)
                         ## Check if this repetition fires within the alarm range
-                        if self.alarm_start and self.alarm_end:
-                            if self.alarm_start <= repeat_time < self.alarm_end:
+                        if alarm_start and alarm_end:
+                            if alarm_start <= repeat_time < alarm_end:
                                 return True
-                        elif self.alarm_start:
-                            if repeat_time >= self.alarm_start:
+                        elif alarm_start:
+                            if repeat_time >= alarm_start:
                                 return True
-                        elif self.alarm_end:
-                            if repeat_time < self.alarm_end:
+                        elif alarm_end:
+                            if repeat_time < alarm_end:
                                 return True
                     ## None of the repetitions matched
                     continue
 
             ## Check if this alarm (first occurrence) fires within the alarm range
-            if self.alarm_start and self.alarm_end:
-                if self.alarm_start <= alarm_time < self.alarm_end:
+            if alarm_start and alarm_end:
+                if alarm_start <= alarm_time < alarm_end:
                     return True
-            elif self.alarm_start:
-                if alarm_time >= self.alarm_start:
+            elif alarm_start:
+                if alarm_time >= alarm_start:
                     return True
-            elif self.alarm_end:
-                if alarm_time < self.alarm_end:
+            elif alarm_end:
+                if alarm_time < alarm_end:
                     return True
 
         return False
