@@ -831,11 +831,16 @@ class Searcher(FilterMixin):
 
         2.1) All components in the recurrence set should have the same UID
 
-        2.2) First element ("master") of the recurrence set may have the RRULE
-        property set
+        2.2) Exactly one element ("master") of the recurrence set may
+        have the RRULE property set.  RFC 5545 does not mandate any
+        particular ordering inside a VCALENDAR, so the master may
+        appear in any position; this method will move it to the head
+        of the returned list so downstream expansion code can rely on
+        ``components[0]`` being the master.
 
-        2.3) Any following elements of a recurrence set ("exception
-        recurrences") should have the RECURRENCE-ID property set.
+        2.3) Any non-master elements of a recurrence set ("exception
+        recurrences") should have the RECURRENCE-ID property set and
+        must not have RRULE.
 
         2.4) (there are more properties that may only be set in the
         master or only in the recurrences, but currently we don't do
@@ -853,25 +858,38 @@ class Searcher(FilterMixin):
         ## We shouldn't get here.  There should always be a valid component.
         if not len(components):
             raise ValueError("Empty component?")
-        first = components[0]
 
-        ## A recurrence set should always be one "master" with
-        ## rrule-id set, followed by zero or more objects without
-        ## rrule-id but with recurrence-id set
+        ## A recurrence set should be exactly one "master" (with RRULE) plus zero
+        ## or more "exception recurrences" (with RECURRENCE-ID and without RRULE),
+        ## OR zero masters plus one-or-more standalone occurrences (all with
+        ## RECURRENCE-ID).  RFC 5545 does not mandate an ordering inside the
+        ## VCALENDAR, so we accept the master in any position and reorder it to
+        ## the head.  Some servers (notably calendar.mail.ru) emit overrides
+        ## before the master.
         if len(components) > 1:
-            if (
-                ("RRULE" not in components[0] and "RECURRENCE-ID" not in components[0])
-                or not all("recurrence-id" in x for x in components[1:])
-                or any("RRULE" in x for x in components[1:])
-            ):
+            masters = [c for c in components if "RRULE" in c and "RECURRENCE-ID" not in c]
+            non_masters = [c for c in components if c not in masters]
+            if len(masters) > 1 or any("RRULE" in c for c in non_masters):
                 raise ValueError(
                     "Expected a valid recurrence set, either with one master component followed with special recurrences or with only occurrences"
                 )
+            if masters:
+                if not all("RECURRENCE-ID" in c for c in non_masters):
+                    raise ValueError(
+                        "Expected a valid recurrence set, either with one master component followed with special recurrences or with only occurrences"
+                    )
+                components = masters + non_masters
+            else:
+                if not all("RECURRENCE-ID" in c for c in non_masters):
+                    raise ValueError(
+                        "Expected a valid recurrence set, either with one master component followed with special recurrences or with only occurrences"
+                    )
 
         ## components should typically be a list with only one component.
         ## if there are more components, it should be a recurrence set
         ## one of the things identifying a recurrence set is that the
         ## uid is the same for all components in the set
+        first = components[0]
         if any(x for x in components if x["uid"] != first["uid"]):
             raise ValueError(
                 "Input parameter component is supposed to contain a single component or a recurrence set - but multiple UIDs found"
