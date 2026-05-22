@@ -85,38 +85,47 @@ class FilterMixin:
                 ## problem for full-day events is at least simplified.
 
         elif comp_name == "VTODO":
-            ## There is a long matrix for VTODO in the RFC, and it
-            ## may seem complicated, but it isn't that bad:
+            ## There is a long matrix for VTODO in the RFC4701,
+            ## section 9.9, and it may seem complicated, but it isn't
+            ## that bad:
 
             ## * A task with DTSTART and DURATION is equivalent with a
             ##   task with DTSTART and DUE.  This complexity is
             ##   already handled by the icalendar library, so all rows
-            ##   in the matrix where VTODO has the DURATION property?"
-            ##   is Y may be removed.
+            ##   in the matrix where "VTODO has the DURATION property?"
+            ##   is "Y" may be removed.
             ##
-            ## * If either DUE or DTSTART is set, use it.
-            if comp_end and not comp_start:
-                comp_start = comp_end
-            if comp_start and not comp_end:
-                comp_end = comp_start
-
-            ## * If both created/completed is set and
-            ##   comp_start/comp_end is not set, then use those instead
-            if not comp_start:
+            ## * The matrix says that if NEITHER DTSTART, DUE nor DURATION
+            ##   is given, then CREATED and COMPLETED serve as the time bounds.
+            ##   When both are present, treat them as a [CREATED, COMPLETED] range.
+            ##   When only COMPLETED is present, treat it as a point event.
+            ##   When only CREATED is present, the RFC condition is just (end > CREATED)
+            ##   — the task is open-ended from CREATED onward, so comp_end = DATE_MAX_DT.
+            if not comp_start and not comp_end:
                 if "CREATED" in component:
                     comp_start = _normalize_dt(component["CREATED"].dt)
                 if "COMPLETED" in component:
                     comp_end = _normalize_dt(component["COMPLETED"].dt)
+                if comp_start and not comp_end:
+                    comp_end = _normalize_dt(DATE_MAX_DT)
 
-            ## * A task may have a DUE before the DTSTART.  The
-            ##   complicated OR-logic in the table may be eliminated
+            ## * If only COMPLETED is given (no DTSTART/DUE/CREATED), treat as a point event
+            if comp_end and not comp_start:
+                comp_start = comp_end
+            ## * If only DTSTART is given (no DUE/DURATION), treat as a zero-duration event
+            if comp_start and not comp_end:
+                comp_end = comp_start
+
+            ## * A task may have the end before the start.  The
+            ##   complicated OR-logic in the matrix may be eliminated
             ##   by swapping start/end if necessary:
             if comp_end and comp_start and comp_end < comp_start:
                 tmp = comp_start
                 comp_start = comp_end
                 comp_end = tmp
 
-            ## * A task with no timestamps is considered to be done "at any or all days".
+            ## * A task with no timestamps is considered to be done "at any or all days",
+            ##   and should always be found when doing a date search:
             if not comp_end and not comp_start:
                 comp_start = _normalize_dt(DATE_MIN_DT)
                 comp_end = _normalize_dt(DATE_MAX_DT)
@@ -159,7 +168,9 @@ class FilterMixin:
             pre-resolved value from check_component() to avoid mutating self.
         :return: True if the component should be included, False if it should be filtered out
         """
-        include_completed = _include_completed if _include_completed is not None else self.include_completed
+        include_completed = (
+            _include_completed if _include_completed is not None else self.include_completed
+        )
         if include_completed:
             return True
 

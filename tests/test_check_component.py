@@ -179,3 +179,27 @@ END:VCALENDAR"""
             searcher.add_property_filter(*prop_filter)
             assert not searcher._check_property_filters(cal.subcomponents[0])
             assert not searcher.check_component(cal)
+
+
+@pytest.mark.parametrize("rrule", [None, "RRULE:FREQ=DAILY\n"])
+def test_vtodo_no_dtstart_range_check(rrule: str | None) -> None:
+    """
+    A VTODO with no DTSTART/DUE/CREATED must not crash on a time-range search,
+    whether or not it has an RRULE.
+    """
+    rrule_line = rrule or ""
+    data = f"""BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTODO
+COMPLETED:20231001T105204Z
+DTSTAMP:20231001T124832Z
+{rrule_line}STATUS:COMPLETED
+SUMMARY:g\xe5 tur
+UID:d432d0a2-6058-11ee-97c8-982cbcdd642c
+END:VTODO
+END:VCALENDAR"""
+    cal = Calendar.from_ical(data)
+    end = datetime(2026, 5, 28, 0, 0, 0)
+    searcher = Searcher(todo=True, end=end, include_completed=True)
+    result = searcher.check_component(cal)
+    assert bool(result)
