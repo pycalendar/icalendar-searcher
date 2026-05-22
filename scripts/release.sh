@@ -140,4 +140,4 @@ git push origin "$TAG"
 
 echo -e "${GREEN}✓ Release ${TAG} created and pushed!${NC}"
 echo -e "${GREEN}✓ GitHub Actions will now run tests and publish to PyPI${NC}"
-echo -e "${GREEN}✓ Check progress at: https://github.com/python-caldav/icalendar-searcher/actions${NC}"
+echo -e "${GREEN}✓ Check progress at: https://github.com/pycalendar/icalendar-searcher/actions${NC}"

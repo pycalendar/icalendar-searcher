@@ -29,8 +29,8 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/python-caldav/icalendar-searcher"
-Issues = "https://github.com/python-caldav/icalendar-searcher/issues"
+Repository = "https://github.com/pycalendar/icalendar-searcher"
+Issues = "https://github.com/pycalendar/icalendar-searcher/issues"
 
 [tool.hatch.version]
 source = "vcs"

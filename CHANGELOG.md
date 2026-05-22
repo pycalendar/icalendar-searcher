@@ -31,7 +31,7 @@ Replace Poetry with Hatch.  Version 1.0.4 never got as far as pypi due to a sill
 
 ### Fixed
 
-Support for RFC7986-style CATEGORIES split over multiple lines.  https://github.com/python-caldav/icalendar-searcher/issues/6
+Support for RFC7986-style CATEGORIES split over multiple lines.  https://github.com/pycalendar/icalendar-searcher/issues/6
 - The sort method did not handle lists very well.  In particular, RFC 7986 section 5.6 defines that the categories field may be split over multiple lines in the icalendar object, this could cause an exception to be raised.  Now lists are sorted and converted to a comma-separated string prior to sorting.
 - The filter method would also run into problems, it has also been fixed
 
