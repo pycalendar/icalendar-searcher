@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Recurrence sets with master in non-first position were rejected**: RFC 5545 does not mandate that the master VEVENT (carrying `RRULE`) appears first in a VCALENDAR.  Some CalDAV servers (notably `calendar.mail.ru`) emit override VEVENTs (with `RECURRENCE-ID`) before the master.  The previous validation assumed `components[0]` was always the master and raised `ValueError` for any other ordering, which caused `caldav._filter_search_results` to silently drop all expanded recurring instances.  The master is now located by content (has `RRULE`, no `RECURRENCE-ID`) regardless of position, and the list is reordered so it sits at index 0 for downstream expansion.  Also reduced duplicated error-check code in the same function.
+
 - **`check_component()` mutated `self` on every call**: The method resolved `None` fields (`include_completed`, `todo`, `event`, `journal`) and normalised `start`/`end`/`alarm_start`/`alarm_end` date objects to datetimes by writing back to `self`.  This made a `Searcher` instance stateful: calling `check_component()` twice could produce different results, and reusing a `Searcher` across multiple search operations (e.g. in the python-caldav library) could silently change behaviour after the first call.  All these values are now computed as local variables inside `check_component()` and threaded to the internal filter methods via new keyword parameters (`_start`, `_end`, `_alarm_start`, `_alarm_end`, `_include_completed`), keeping `self` immutable throughout.  (Triggered by https://github.com/python-caldav/caldav/issues/650)
 
 ## [1.0.5] - 2026-02-19

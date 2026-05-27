@@ -402,3 +402,106 @@ def test_validate_all_same_component_type_same_uid_without_recurrence() -> None:
     # This should raise ValueError because first component lacks RRULE
     with pytest.raises(ValueError, match="valid recurrence set"):
         searcher._validate_and_normalize_component(cal)
+
+
+def test_validate_recurrence_set_master_after_exception() -> None:
+    """Master may appear after the exception in the VCALENDAR.
+
+    RFC 5545 does not mandate any particular ordering of VEVENT components
+    inside a VCALENDAR.  Some CalDAV servers (notably ``calendar.mail.ru``)
+    return overrides before the master in the .ics they hand out, which used
+    to make ``_validate_and_normalize_component`` raise.  The normalized list
+    must put the master first so that the downstream expansion code can rely
+    on ``components[0]`` being the master.
+    """
+    cal = Calendar()
+
+    # Exception event first (mail.ru-style ordering)
+    exception = Event()
+    exception.add("uid", "recurring-meeting")
+    exception.add("summary", "Special Meeting")
+    exception.add("dtstart", datetime(2025, 1, 13, 14, 0))
+    exception.add("dtend", datetime(2025, 1, 13, 15, 0))
+    exception.add("recurrence-id", datetime(2025, 1, 13, 10, 0))
+    cal.add_component(exception)
+
+    # Master event with RRULE last
+    master = Event()
+    master.add("uid", "recurring-meeting")
+    master.add("summary", "Weekly Meeting")
+    master.add("dtstart", datetime(2025, 1, 6, 10, 0))
+    master.add("dtend", datetime(2025, 1, 6, 11, 0))
+    master.add("rrule", vRecur(FREQ="WEEKLY", COUNT=4))
+    cal.add_component(master)
+
+    searcher = Searcher()
+    result = searcher._validate_and_normalize_component(cal)
+
+    assert len(result) == 2, "Should contain master and exception"
+    assert "rrule" in result[0], "Master must be reordered to position 0"
+    assert "recurrence-id" not in result[0], "Master must not carry RECURRENCE-ID"
+    assert "recurrence-id" in result[1], "Exception must follow the master"
+    assert "rrule" not in result[1], "Exception must not carry RRULE"
+
+
+def test_validate_recurrence_set_master_in_middle() -> None:
+    """Master may appear between exceptions in arbitrary order."""
+    cal = Calendar()
+
+    exception1 = Event()
+    exception1.add("uid", "meeting")
+    exception1.add("summary", "First override")
+    exception1.add("dtstart", datetime(2025, 1, 13, 14, 0))
+    exception1.add("dtend", datetime(2025, 1, 13, 15, 0))
+    exception1.add("recurrence-id", datetime(2025, 1, 13, 10, 0))
+    cal.add_component(exception1)
+
+    master = Event()
+    master.add("uid", "meeting")
+    master.add("summary", "Weekly Meeting")
+    master.add("dtstart", datetime(2025, 1, 6, 10, 0))
+    master.add("dtend", datetime(2025, 1, 6, 11, 0))
+    master.add("rrule", vRecur(FREQ="WEEKLY", COUNT=10))
+    cal.add_component(master)
+
+    exception2 = Event()
+    exception2.add("uid", "meeting")
+    exception2.add("summary", "Second override")
+    exception2.add("dtstart", datetime(2025, 1, 20, 14, 0))
+    exception2.add("dtend", datetime(2025, 1, 20, 15, 0))
+    exception2.add("recurrence-id", datetime(2025, 1, 20, 10, 0))
+    cal.add_component(exception2)
+
+    searcher = Searcher()
+    result = searcher._validate_and_normalize_component(cal)
+
+    assert len(result) == 3, "Should contain master and both exceptions"
+    assert "rrule" in result[0], "Master must be reordered to position 0"
+    assert all("recurrence-id" in c for c in result[1:]), (
+        "All non-master components must carry RECURRENCE-ID"
+    )
+
+
+def test_validate_recurrence_set_two_masters_rejected() -> None:
+    """Two VEVENTs both carrying RRULE must be rejected as invalid."""
+    cal = Calendar()
+
+    master1 = Event()
+    master1.add("uid", "meeting")
+    master1.add("summary", "Weekly Meeting A")
+    master1.add("dtstart", datetime(2025, 1, 6, 10, 0))
+    master1.add("dtend", datetime(2025, 1, 6, 11, 0))
+    master1.add("rrule", vRecur(FREQ="WEEKLY", COUNT=4))
+    cal.add_component(master1)
+
+    master2 = Event()
+    master2.add("uid", "meeting")
+    master2.add("summary", "Weekly Meeting B")
+    master2.add("dtstart", datetime(2025, 1, 7, 10, 0))
+    master2.add("dtend", datetime(2025, 1, 7, 11, 0))
+    master2.add("rrule", vRecur(FREQ="DAILY", COUNT=4))
+    cal.add_component(master2)
+
+    searcher = Searcher()
+    with pytest.raises(ValueError, match="valid recurrence set"):
+        searcher._validate_and_normalize_component(cal)
