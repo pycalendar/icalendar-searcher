@@ -1,12 +1,12 @@
 """Filtering logic for icalendar components."""
 
-from collections.abc import Iterable
 from datetime import datetime, timedelta
 
 from icalendar import Component, error
-from icalendar.prop import vCategory, vText
+from icalendar.prop import vText
 from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
+from . import comma_list
 from .collation import Collation, get_collation_function
 from .utils import _normalize_dt
 
@@ -206,45 +206,41 @@ class FilterMixin:
         for key, operator in self._property_operator.items():
             filter_value = self._property_filters.get(key)
 
-            # Map "category" (singular) to "CATEGORIES" (plural) in the component
-            if key in ("categories", "category"):
-                comp_key = "categories"
-                comp_value = set([str(x) for x in component.categories])
-            else:
-                comp_key = key
-                comp_value = component.get(comp_key)
-
             # Get collation settings for this property
             collation = self._property_collation.get(key, Collation.SIMPLE)
             locale = self._property_locale.get(key)
             case_sensitive = self._property_case_sensitive.get(key, True)
 
-            ## "categories" (plural) needs special preprocessing - split on commas
-            if key == "categories" and comp_value is not None and filter_value is not None:
-                if isinstance(filter_value, vCategory):
-                    ## TODO: This special case, handling one element different from several, is a bit bad indeed
-                    if len(filter_value.cats) == 1:
-                        filter_value = str(filter_value.cats[0])
-                        if "," in filter_value:
-                            filter_value = set(filter_value.split(","))
-                    else:
-                        filter_value = set([str(x) for x in filter_value.cats])
-                elif isinstance(filter_value, str) or isinstance(filter_value, vText):
-                    ## TODO: probably this is irrelevant dead code
-                    filter_value = str(filter_value)
-                    if "," in filter_value:
-                        filter_value = set(filter_value.split(","))
-                elif isinstance(filter_value, Iterable):
-                    ## TODO: probably this is irrelevant dead code
-                    # Convert iterable to set, splitting on commas if strings contain them
-                    result_set = set()
-                    for item in filter_value:
-                        item_str = str(item)
-                        if "," in item_str:
-                            result_set.update(item_str.split(","))
-                        else:
-                            result_set.add(item_str)
-                    filter_value = result_set
+            ## Comma-token-list properties (CATEGORIES; see comma_list.py) carry
+            ## their own plural/singular matching semantics.  Delegate the whole
+            ## per-key decision so that logic lives in exactly one place.
+            if comma_list.is_comma_list_key(key):
+                if operator == "undef" and skip_undef:
+                    ## See the skip_undef note below.
+                    continue
+                matched = comma_list.matches(
+                    key,
+                    operator,
+                    filter_value,
+                    component,
+                    collation=collation,
+                    case_sensitive=case_sensitive,
+                    locale=locale,
+                )
+                if operator == "undef":
+                    ## present -> fail; absent -> ok, keep checking other filters
+                    if not matched:
+                        return False
+                    continue
+                ## contains / == : preserves the prior behaviour of returning True
+                ## (short-circuiting the remaining filters) as soon as a comma-list
+                ## filter matches.  TODO: this short-circuit looks like a latent
+                ## bug compared to the generic "contains" path; left as-is here
+                ## since this is a behaviour-preserving refactor.
+                return matched
+
+            comp_key = key
+            comp_value = component.get(comp_key)
             if operator == "undef":
                 if skip_undef:
                     ## The base (master) element of this recurrence set already
@@ -254,53 +250,12 @@ class FilterMixin:
                     ## we skip the check here to avoid false negatives.
                     continue
                 ## Property should NOT be defined
-                if key in ("categories", "category"):
-                    ## icalendar (>=6.x) provides a default empty vCategory object
-                    ## even when CATEGORIES is not explicitly set in the iCalendar data,
-                    ## making `"categories" in component` always True.  Check the
-                    ## already-computed comp_value set instead: if it is non-empty the
-                    ## property is actually present.
-                    if comp_value:
-                        return False
-                elif comp_key in component:
+                if comp_key in component:
                     return False
             elif operator == "contains":
                 ## Property should contain the filter value (substring match)
                 if comp_key not in component:
                     return False
-                if key == "category":
-                    # "category" (singular) does substring matching within category names
-                    # comp_value is a vCategory object
-                    if comp_value is not None:
-                        filter_str = str(filter_value)
-                        # Check if filter_str is a substring of any category
-                        collation_fn = get_collation_function(collation, case_sensitive, locale)
-                        for cat in comp_value:
-                            if collation_fn(filter_str, cat):
-                                return True
-                    return False
-                if key == "categories":
-                    # For categories, "contains" means filter categories is a subset of component categories
-                    # filter_value can be a string (single category) or set (multiple categories)
-                    if isinstance(filter_value, str):
-                        # Single category: check if it's in component categories
-                        if not case_sensitive:
-                            return any(filter_value.lower() == cv.lower() for cv in comp_value)
-                        else:
-                            return filter_value in comp_value
-                    else:
-                        # Multiple categories (set): check if all are in component categories (subset check)
-                        assert isinstance(filter_value, set), (
-                            f"Expected set but got {type(filter_value)}"
-                        )
-                        for fv in filter_value:
-                            if not case_sensitive:
-                                if not any(fv.lower() == cv.lower() for cv in comp_value):
-                                    return False
-                            else:
-                                if fv not in comp_value:
-                                    return False
-                        return True
 
                 ## Convert to string for substring matching
                 comp_str = str(comp_value)
@@ -314,56 +269,6 @@ class FilterMixin:
                 ## Property should exactly match the filter value
                 if comp_key not in component:
                     return False
-
-                ## For "category" (singular), check exact match to at least one category name
-                if key == "category":
-                    if comp_value is not None:
-                        filter_str = str(filter_value)
-                        # Check if filter_str exactly matches any category
-                        for cat in comp_value:
-                            if not case_sensitive:
-                                if filter_str.lower() == cat.lower():
-                                    return True
-                            else:
-                                if filter_str == cat:
-                                    return True
-                    return False
-
-                ## For categories, check exact set equality with collation support
-                if key == "categories":
-                    # filter_value can be a string (single category) or set (multiple categories)
-                    assert isinstance(comp_value, set), f"Expected set but got {type(comp_value)}"
-
-                    if isinstance(filter_value, str):
-                        # Single category with "==" operator: component must have exactly that one category
-                        if len(comp_value) != 1:
-                            return False
-                        if not case_sensitive:
-                            return filter_value.lower() == list(comp_value)[0].lower()
-                        else:
-                            return filter_value in comp_value
-                    else:
-                        # Multiple categories (set): check exact equality with collation
-                        assert isinstance(filter_value, set), (
-                            f"Expected set but got {type(filter_value)}"
-                        )
-                        if len(filter_value) != len(comp_value):
-                            return False
-                        # Check if all filter categories have a matching component category
-                        for fv in filter_value:
-                            found = False
-                            for cv in comp_value:
-                                if not case_sensitive:
-                                    if fv.lower() == cv.lower():
-                                        found = True
-                                        break
-                                else:
-                                    if fv == cv:
-                                        found = True
-                                        break
-                            if not found:
-                                return False
-                        return True
 
                 ## Compare the values This is tricky, as the values
                 ## may have different types.  TODO: we should add more

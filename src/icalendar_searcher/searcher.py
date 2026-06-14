@@ -12,6 +12,7 @@ import recurring_ical_events
 from icalendar import Calendar, Component, Timezone
 from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
+from . import comma_list
 from .collation import Collation, get_sort_key_function
 from .filters import FilterMixin
 from .utils import _iterable_or_false, _normalize_dt, types_factory
@@ -207,34 +208,18 @@ class Searcher(FilterMixin):
                                         locale="de_DE")
 
         """
-        ## Special handling of property "category" (singular) vs "categories" (plural).
-        ## "categories" (plural): list of categories with exact matching (no substring)
-        ##   - "contains": subset check (all filter categories must be in component)
-        ##   - "==": exact set equality (same categories, order doesn't matter)
-        ##   - Commas split into multiple categories
-        ## "category" (singular): substring matching within category names
-        ##   - "contains": substring match (e.g., "out" matches "outdoor")
-        ##   - "==": exact match to at least one category name
-        ##   - Commas NOT split, treated as literal part of category name
+        ## Comma-token-list properties ("category"/"categories"; see
+        ## comma_list.py) carry their own plural-vs-singular semantics: the
+        ## plural form splits on commas and matches exactly, the singular form
+        ## keeps commas literal and matches substrings.
         key = key.lower()
         if operator not in ("contains", "undef", "=="):
             raise NotImplementedError(f"The operator {operator} is not supported yet.")
         if operator != "undef":
-            ## Map "category" to "categories" for types_factory lookup
-            property_key = "categories" if key == "category" else key
-
-            ## Special treatment for "categories" (plural): split on commas
-            if key == "categories" and isinstance(value, str):
-                ## If someone asks for FAMILY,FINANCE, they want a match on anything
-                ## having both those categories set, not a category literally named "FAMILY,FINANCE"
-                fact = types_factory.for_property(property_key)
-                self._property_filters[key] = fact(fact.from_ical(value))
-            elif key == "category":
-                ## For "category" (singular), store as string (no comma splitting)
-                ## This allows substring matching within category names
-                self._property_filters[key] = value
+            if comma_list.is_comma_list_key(key):
+                self._property_filters[key] = comma_list.store_filter_value(key, value)
             else:
-                self._property_filters[key] = types_factory.for_property(property_key)(value)
+                self._property_filters[key] = types_factory.for_property(key)(value)
         self._property_operator[key] = operator
 
         # Determine collation strategy
@@ -758,8 +743,8 @@ class Searcher(FilterMixin):
             ),
         }
         for sort_key, reverse in self._sort_keys:
-            if sort_key == "categories":
-                val = comp.categories
+            if comma_list.is_plural_sort_key(sort_key):
+                val = comma_list.sort_value(sort_key, comp)
             else:
                 val = comp.get(sort_key, None)
             if val is None:
