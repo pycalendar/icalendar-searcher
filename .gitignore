@@ -123,3 +123,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 src/icalendar_searcher/_version.py
+
+# NLnet MoU task list, maintained out of tree (see docs/ROADMAP.md);
+# deleted once the numbers have been uploaded
+/tmp-estimates
+
+# editor and script backups
+*.bak
