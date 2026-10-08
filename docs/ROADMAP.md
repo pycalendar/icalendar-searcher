@@ -200,6 +200,14 @@ it is a wrong verdict rather than a missing one, and because it reaches every
 |---|---|---|
 | 1.1 Conjunctive property filters | All operators AND correctly regardless of insertion order, pinned by tests that add the same filters in both orders; the `filters.py:237` comment removed rather than reworded | 4 |
 
+**Tasks:**
+- [x] 1.1 Filters AND correctly regardless of insertion order (`==`, and comma-list properties under any operator)
+- [x] 1.1 Test matrix: every operator against every property class (ordinary, comma-list plural and singular, `undef`, expanded recurrences with `skip_undef`, singular `contains` under a non-`SIMPLE` collation), in both orders
+- [x] 1.1 The `filters.py:237` "latent bug" comment removed
+- [x] 1.1 Changelog entry
+- [ ] 1.1 `caldav`'s own suite run against the release candidate, and the fallout read
+- [ ] 1.1 The 1.0.8 release
+
 The fix itself is half an hour.  The rest is the test matrix - every operator against
 every property class (ordinary, comma-list plural, comma-list singular, `undef`,
 expanded recurrences with `skip_undef`, singular `contains` under a non-`SIMPLE`
@@ -241,13 +249,21 @@ operators.  Decide it, write it down, test it.
 once the above is settled.
 
 **Phase 2 depends on Phase 1.**  A negated filter is only well defined once filters
-AND correctly - in today's short-circuiting loop a `!=` filter would be wrong twice
+AND correctly - in the short-circuiting loop 1.1 replaced, a `!=` filter would be wrong twice
 over, and tests written against it would pin the wrong behaviour.
 
 | Item | Deliverable | h |
 |---|---|---|
 | 2.1 `!=` / `<>` negation | Both spellings implemented for ordinary and comma-list properties, with the undefined-property semantics decided, documented and tested; agreement with the CalDAV `negate-condition` path verified against `caldav`'s XML builder | 3 |
 | 2.2 `def`, and truth in the docstring | `def` implemented; the docstring's operator list reduced to what exists, with the rest moved to a documented "not implemented" list matching the README | 1 |
+
+**Tasks:**
+- [ ] 2.1 Semantics of `!=` / `<>` settled and written down, including undefined properties
+- [ ] 2.1 `!=` / `<>` implemented for ordinary and comma-list properties
+- [ ] 2.1 Tests: ordinary and comma-list, plural and singular, property present and absent
+- [ ] 2.1 Agreement with `caldav`'s `negate-condition` XML builder verified
+- [ ] 2.2 `def` implemented
+- [ ] 2.2 Docstring operator list reduced to what exists; the rest listed as not implemented, matching the README
 
 2.1 breaks down as half an hour to settle and write down the semantics, an hour to
 implement, and an hour and a half of tests - ordinary and comma-list properties,
@@ -319,6 +335,13 @@ hidden by a fallback that says nothing.
 | 3.3 Collation test matrix | Both operators against de_DE / tr_TR / nb_NO / root, across both axes, including the cases in the table above | 2 |
 | 3.4 Collation documentation | The README's collation section rewritten around the axes as decided, saying plainly that the correct answer is locale-dependent | 1 |
 
+**Tasks:**
+- [ ] 3.1 The collation axes decided and written down, mapped onto ICU and the CalDAV collation names
+- [ ] 3.1 The false comment at `collation.py:187` deleted
+- [ ] 3.2 Collation-aware `contains` on ICU `StringSearch`, consistent with `==`
+- [ ] 3.3 Collation test matrix (de_DE / tr_TR / nb_NO / root, both axes, both operators)
+- [ ] 3.4 README collation section rewritten
+
 3.1 is the item and 3.2 to 3.4 are its consequences, which is why they are listed
 separately even though all four are funded.  3.1 is an API decision under a 1.x that
 the README declares stable, and it has to be reconciled with what `caldav` already
@@ -351,6 +374,13 @@ same person weeks apart, and a reader has no way to tell which is current.
 | 4.3 Executable examples | A harness that runs every example in the guide as part of CI, so the guide cannot rot the way the README did | 4 | to be requested |
 | 4.4 API reference | Generated from the docstrings, with the docstrings corrected where they promise what the code does not do (see 2.2) | 5 | funded |
 | 4.5 README repair and peer review | One `## Maturity` section that is true; revisions from at least one reviewer who is not the author | 3 | funded |
+
+**Tasks:**
+- [ ] 4.1 `docs/` tree that builds in CI and is published *(to be requested)*
+- [ ] 4.2 Usage guide
+- [ ] 4.3 Executable-examples harness in CI *(to be requested)*
+- [ ] 4.4 API reference, with the docstrings corrected
+- [ ] 4.5 README `## Maturity` section, and a review by someone other than the author
 
 4.2 is where most of the value is, and twelve hours is not generous for it.  The
 RFC 4791 §9.9 time-range semantics are the single hardest thing about using this
@@ -424,6 +454,11 @@ at it.
 | 5.1 Human review of the AI-written surface | `filter`, `filter_calendar` and `sort_calendar` read line by line against the RFC by someone who did not generate them, with the findings filed as issues and the cheap ones fixed | 8 |
 | 5.2 `filters.py` coverage | The RFC 4791 §9.9 branches covered, taking the module from 81% towards the rest of the package; the VTODO matrix tested case by case against the RFC text rather than against the implementation | 4 |
 | 5.3 Property-type comparison, analysed and filed upstream | A written analysis of what `filters.py:274` asks for - how an `icalendar` property value should compare against a filter value, per property type - filed as an issue against `icalendar` | 2 |
+
+**Tasks:**
+- [ ] 5.1 `filter`, `filter_calendar` and `sort_calendar` reviewed against the RFCs by a human; findings filed, cheap ones fixed
+- [ ] 5.2 RFC 4791 §9.9 branches of `filters.py` covered, the VTODO matrix tested against the RFC text
+- [ ] 5.3 Property-type comparison analysed and filed against `icalendar`
 
 5.1 is deliberately not "write more tests".  Tests written by reading the
 implementation pin the implementation, including its bugs; the whole point is to
