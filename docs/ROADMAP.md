@@ -205,7 +205,7 @@ it is a wrong verdict rather than a missing one, and because it reaches every
 - [x] 1.1 Test matrix: every operator against every property class (ordinary, comma-list plural and singular, `undef`, expanded recurrences with `skip_undef`, singular `contains` under a non-`SIMPLE` collation), in both orders
 - [x] 1.1 The `filters.py:237` "latent bug" comment removed
 - [x] 1.1 Changelog entry
-- [ ] 1.1 `caldav`'s own suite run against the release candidate, and the fallout read
+- [x] 1.1 `caldav`'s own suite run against the release candidate, and the fallout read
 - [ ] 1.1 The 1.0.8 release
 
 The fix itself is half an hour.  The rest is the test matrix - every operator against
